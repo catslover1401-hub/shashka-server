@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="uz">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shashka Online</title>
+    <style>
+      body {
+        background: radial-gradient(circle at top left, #333, #111);
+        color: #fff;
+        font-family: Arial, sans-serif;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        margin: 0;
+      }
+      canvas {
+        border: 3px solid #fff;
+        border-radius: 12px;
+        box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+        cursor: pointer;
+      }
+      #status {
+        margin-top: 20px;
+        font-size: 20px;
+      }
+      #roomForm {
+        margin-bottom: 20px;
+      }
+      input {
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: none;
+        outline: none;
+        margin-right: 10px;
+      }
+      button {
+        background: #28a745;
+        color: #fff;
+        border: none;
+        padding: 8px 14px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: 0.3s;
+      }
+      button:hover {
+        background: #218838;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>♟ Shashka Online</h1>
+
+    <div id="roomForm">
+      <input type="text" id="roomInput" placeholder="Xona nomini kiriting..." />
+      <button id="joinBtn">Xonaga kirish</button>
+    </div>
+
+    <canvas id="board" width="640" height="640"></canvas>
+    <div id="status">Xonaga kirilmagan</div>
+
+    <script>
+      const canvas = document.getElementById("board");
+      const ctx = canvas.getContext("2d");
+      const statusText = document.getElementById("status");
+      const joinBtn = document.getElementById("joinBtn");
+      const roomInput = document.getElementById("roomInput");
+
+      let board = [];
+      let playerColor = null;
+      let socket;
+      let roomName = null;
+
+      function initBoard() {
+        board = [];
+        for (let y = 0; y < 8; y++) {
+          board[y] = [];
+          for (let x = 0; x < 8; x++) {
+            if (y < 3 && (x + y) % 2 === 1) board[y][x] = "qora";
+            else if (y > 4 && (x + y) % 2 === 1) board[y][x] = "oq";
+            else board[y][x] = null;
+          }
+        }
+      }
+
+      function drawPiece(x, y, color) {
+        ctx.beginPath();
+        ctx.arc(x * 80 + 40, y * 80 + 40, 30, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.strokeStyle = "#222";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      function drawBoard() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // qora o‘yinchi uchun taxtani aylantiramiz
+        if (playerColor === "qora") {
+          ctx.save();
+          ctx.translate(canvas.width, canvas.height);
+          ctx.rotate(Math.PI);
+        }
+
+        // kataklar
+        for (let y = 0; y < 8; y++) {
+          for (let x = 0; x < 8; x++) {
+            ctx.fillStyle = (x + y) % 2 === 0 ? "#f0d9b5" : "#b58863";
+            ctx.fillRect(x * 80, y * 80, 80, 80);
+
+            if (board[y][x] === "oq") drawPiece(x, y, "white");
+            if (board[y][x] === "qora") drawPiece(x, y, "black");
+          }
+        }
+
+        // qora uchun aylanishni bekor qilamiz
+        if (playerColor === "qora") {
+          ctx.restore();
+        }
+
+        // pastki burchakka SH+H yozuvi
+        ctx.font = "bold 22px Arial";
+        ctx.fillStyle = "rgba(255,255,255,0.9)";
+        ctx.fillText("SH+H", canvas.width - 80, canvas.height - 15);
+      }
+
+      // faqat o‘yin boshlandi deganda chizamiz
+      function startGame(color) {
+        playerColor = color;
+        initBoard();
+        drawBoard();
+        statusText.textContent = `Siz ${color === "oq" ? "OQ" : "QORA"} toshsiz`;
+      }
+
+      // Xonaga ulanish
+      joinBtn.onclick = () => {
+        roomName = roomInput.value.trim();
+        if (!roomName) return alert("Iltimos, xona nomini kiriting!");
+
+        socket = new WebSocket("wss://shashka-server.onrender.com");
+
+        socket.onopen = () => {
+          socket.send(
+            JSON.stringify({
+              type: "join",
+              room: roomName,
+            })
+          );
+          statusText.textContent = "Xonaga ulanmoqda...";
+        };
+
+        socket.onmessage = (event) => {
+          const data = JSON.parse(event.data);
+
+          if (data.type === "start") {
+            startGame(data.player);
+            statusText.textContent = data.msg;
+          }
+
+          if (data.type === "move") {
+            board = data.board;
+            drawBoard();
+          }
+        };
+      };
+
+      // vaqtinchalik bosish (demo maqsadida)
+      canvas.addEventListener("click", (e) => {
+        if (!playerColor) return;
+        const x = Math.floor(e.offsetX / 80);
+        const y = Math.floor(e.offsetY / 80);
+        console.log("Bosilgan katak:", x, y);
+      });
+    </script>
+  </body>
+</html>
